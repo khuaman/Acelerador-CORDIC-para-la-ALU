@@ -1,0 +1,19 @@
+# Salidas de simulacion
+*.vcd
+*.out
+*.vvp
+a.out
+
+# Artefactos de sintesis
+*.jou
+*.log
+*.str
+.Xil/
+vivado*/
+obj_dir/
+
+# Sistema
+.DS_Store
+
+Indicaciones generales P1.pdf
+P1-Enunciado.pdf
