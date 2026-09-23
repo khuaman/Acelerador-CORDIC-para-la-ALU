@@ -129,6 +129,48 @@ Para explicitar el sentido de rotación en el hardware y responder cabalmente a 
 
 **Latencia total garantizada:** Exactamente **18 ciclos de reloj** (1 ciclo de setup en INIT + 16 ciclos de rotación + 1 ciclo al entrar a DONE).
 
+### Por qué la condición es $z_{\text{next}}$ y no $z$
+
+Este es el punto más delicado del diseño y la fuente de error más probable al implementarlo.
+
+La lógica de próximo estado, evaluada durante la iteración $i$, está eligiendo **quién ejecutará la iteración $i+1$**. Esa decisión necesita el signo de $z_{i+1}$, que en ese instante **todavía no está en el registro**: está saliendo del sumador. Ese valor combinacional es `z_next`.
+
+Leer `z_reg[31]` en su lugar desfasaría la decisión una iteración completa. El efecto no es un error pequeño, es la ruptura del algoritmo. Comparación de la secuencia de estados para $\theta = 30°$:
+
+```
+correcto (z_next):  POS NEG POS NEG POS POS NEG POS NEG NEG POS POS NEG POS NEG NEG
+con z_reg:          POS POS NEG NEG NEG NEG NEG NEG NEG NEG NEG NEG NEG NEG NEG NEG
+```
+
+Con el desfase la máquina se queda pegada en `NEG` y nunca corrige: el coseno sale $0.728384$ en vez de $0.866025$, un error de $1.4 \times 10^{-1}$ frente a los $7.3 \times 10^{-6}$ del diseño correcto.
+
+**La transición que sale de `S_INIT` sí usa `angle[31]`**, y es correcto: en ese ciclo $z$ aún no se ha cargado, así que el valor que $z$ tendrá en el próximo ciclo *es* `angle`. Son el mismo bit.
+
+Ambos casos siguen una regla única:
+
+> El próximo estado se elige con el signo del valor que $z$ tendrá en el ciclo siguiente. Saliendo de `S_INIT` ese valor es `angle`; saliendo de un estado de rotación es `z_next`.
+
+### Nota de diseño: registrar $d$ frente a calcularlo
+
+El bit que distingue `S_ROT_POS` de `S_ROT_NEG` es, en la práctica, un flip-flop que guarda `z_next[31]`. Esta FSM **registra** el sentido de rotación.
+
+La alternativa es un único estado `ITERATE` que **calcula** $d$ combinacionalmente con $d = $ `z_reg[31]` y elige los signos con un multiplexor. Ambas versiones se implementaron y se compararon instanciándolas en paralelo con las mismas entradas:
+
+| Comparación | Resultado |
+|---|---|
+| Ángulos evaluados | 309 (los 5 del enunciado, negativos, límites de convergencia $\pm 1.7433$ rad y 300 aleatorios) |
+| Muestras por flanco de reloj | 6522 |
+| Diferencias en `cos_out` / `sin_out` / `done` | **0** |
+| Latencia | 18 ciclos en ambas |
+
+Son indistinguibles **ciclo a ciclo**, no solo en el resultado final.
+
+El costo de registrar $d$ es que la lógica de próximo estado pasa a depender de la salida del sumador de $z$, añadiendo al camino crítico una cola de `sumador → bit de signo → mux de próximo estado → registro de estado`. A cambio, la dirección de rotación queda **explícita en el diagrama de estados** en lugar de esconderse en el datapath, que es precisamente lo que pide la Ficha de Evaluación.
+
+### Verificación de la propiedad de Moore
+
+Se comprobó en simulación que `done == (state == S_DONE)` se cumple en **las 6522 muestras**, incluidos pulsos de `start` espurios a mitad del cálculo y `reset` durante una operación en curso. La salida depende únicamente del estado, nunca de las entradas: la máquina es de Moore en sentido estricto.
+
 ---
 
 ## Interfaz de Módulos
