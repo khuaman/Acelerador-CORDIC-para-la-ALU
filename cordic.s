@@ -46,6 +46,13 @@ error_count:    .word 0
                 .globl main
 
 
+# Programa principal
+# 1. Recorre la lista de 5 angulos de prueba (0°, 30°, 45°, 60°, 90°).
+# 2. Invoca cordic para cada uno, guardando los resultados en memoria.
+# 3. Recupera los valores y los compara contra los esperados.
+# 4. Acumula en error_count las comprobaciones que salen de tolerancia.
+
+# Registros: s0..s7 mantienen punteros e indices a lo largo de todo main.
 
 
 main:
@@ -55,7 +62,7 @@ main:
                 addi    s3, zero, 0             # s3 = indice del caso (0)
                 addi    s4, zero, 5             # s4 = numero de casos (5)
 
-
+# Calcular
 calc_loop:
                 bge     s3, s4, calc_done
 
@@ -70,7 +77,7 @@ calc_loop:
                 addi    s3, s3, 1
                 jal     zero, calc_loop
 calc_done:
-
+# Verificar
                 la      s6, cos_expected
                 la      s7, sin_expected
                 addi    s3, zero, 0             # reinicia el indice
@@ -80,6 +87,7 @@ check_loop:
                 bge     s3, s4, check_done
                 slli    t0, s3, 2
 
+                # coseno: |obtenido - esperado| < tolerancia
                 add     t1, s1, t0
                 lw      t2, 0(t1)               # t2 = obtenido
                 add     t1, s6, t0
@@ -93,7 +101,7 @@ cos_abs_ok:
                 addi    s5, s5, 1
 cos_in_range:
 
-                # --- seno: mismo criterio ---
+                #  seno: mismo criterio
                 add     t1, s2, t0
                 lw      t2, 0(t1)
                 add     t1, s7, t0
@@ -117,7 +125,22 @@ check_done:
                 addi    a7, zero, 10            # syscall exit
                 ecall
 
-# Logica del CORDIC
+
+
+# Logica del CORDIC (calcula cos y sin)
+
+# Parametros:
+#   a0 = direccion donde se almacena el coseno
+#   a1 = direccion donde se almacena el seno
+#   a2 = angulo theta en radianes, formato Q2.30
+
+# Retorno:
+#   Escribe dos palabras en memoria. No modifica ningun registro s.
+#   Usa solo t0..t6, que son de uso libre segun la convencion de llamada.
+
+# Registros internos:
+#   t0 = x      t1 = y      t2 = z      t3 = i (contador)
+#   t4 = puntero a atan_table[i]        t5, t6 = temporales
 
 cordic:
                 lui     t0, 159188              # 159188 = 0x26DD4
@@ -131,7 +154,7 @@ cordic_loop:
                 addi    t5, zero, 16            # N = 16 iteraciones
                 bge     t3, t5, cordic_end
 
- 
+                # Terminos desplazados: x >>> i  e  y >>> i 
                 sra     t5, t0, t3              # t5 = x >>> i
                 sra     t6, t1, t3              # t6 = y >>> i
 
