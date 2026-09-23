@@ -1,5 +1,5 @@
 module cordic #(
-  parameter WIDTH = 32,
+  parameter WIDTH = 32, // bits
   parameter FRAC  = 30,  // Q2.30
   parameter ITER  = 16   // numero de iteraciones
 )(
@@ -12,9 +12,9 @@ module cordic #(
   output reg                     done 
 );
 
-  localparam signed [WIDTH-1:0] INV_K = 32'd652032874; // 0.607252935
+  localparam signed [WIDTH-1:0] INV_K = 32'd652032874; // Ganancia 0.607252935
 
-
+// Estados
   localparam [2:0] S_IDLE    = 3'd0, 
                    S_INIT    = 3'd1,
                    S_ROT_POS = 3'd2, 
@@ -28,7 +28,7 @@ module cordic #(
   reg        [4:0]       iter;  // contador de iteraciones
 
 
-  // Tabla de angulos
+  // Tabla de angulos (necesaria para calculo del algoritmo)
   reg [WIDTH-1:0] atan_lut [0:ITER-1];
 
   initial begin
@@ -52,7 +52,7 @@ module cordic #(
 
   wire signed [WIDTH-1:0] x_shifted = x_reg >>> iter;  // x_i * 2^-i
   wire signed [WIDTH-1:0] y_shifted = y_reg >>> iter;  // y_i * 2^-i
-  wire signed [WIDTH-1:0] alpha     = $signed(atan_lut[iter]);
+  wire signed [WIDTH-1:0] alpha     = $signed(atan_lut[iter]); // angulo de la tabla
 
   // Valores siguientes para ROT_POS
   wire signed [WIDTH-1:0] x_next_pos = x_reg - y_shifted;
@@ -64,35 +64,39 @@ module cordic #(
   wire signed [WIDTH-1:0] y_next_neg = y_reg - x_shifted;
   wire signed [WIDTH-1:0] z_next_neg = z_reg + alpha;
 
+  // Determina si la rotacion sera positiva
   wire in_rot_pos = (state == S_ROT_POS);
 
+  // Condicionales en caso de ser rotacion positiva o negativa
   wire signed [WIDTH-1:0] x_next = in_rot_pos ? x_next_pos : x_next_neg;
   wire signed [WIDTH-1:0] y_next = in_rot_pos ? y_next_pos : y_next_neg;
   wire signed [WIDTH-1:0] z_next = in_rot_pos ? z_next_pos : z_next_neg;
 
+  // Ultima iteracion
   wire last_iter = (iter == ITER-1);
 
+  // Next State Logic
   always @(*) begin
     case (state)
       S_IDLE:    next_state = start ? S_INIT : S_IDLE;
 
-      S_INIT:    next_state = angle[WIDTH-1] ? S_ROT_NEG : S_ROT_POS;
+      S_INIT:    next_state = angle[WIDTH-1] ? S_ROT_NEG : S_ROT_POS; // Signo = 1 --> Neg | Signo = 0 --> Pos
 
       S_ROT_POS: begin
-        if (last_iter)
+        if (last_iter) // Se llego a la iteracion 15
           next_state = S_DONE;
         else
-          next_state = z_next[WIDTH-1] ? S_ROT_NEG : S_ROT_POS;
+          next_state = z_next[WIDTH-1] ? S_ROT_NEG : S_ROT_POS; // Se revisa si la rotacion cambia o se queda
       end
 
       S_ROT_NEG: begin
-        if (last_iter)
+        if (last_iter) // Se llego a la iteracion 15
           next_state = S_DONE;
         else
-          next_state = z_next[WIDTH-1] ? S_ROT_NEG : S_ROT_POS;
+          next_state = z_next[WIDTH-1] ? S_ROT_NEG : S_ROT_POS; // Se revisa si la rotacion cambia o se queda
       end
 
-      S_DONE:    next_state = start ? S_INIT : S_DONE;
+      S_DONE:    next_state = start ? S_INIT : S_DONE; // Se mantiene en S_DONE si start = 0
 
       default:   next_state = S_IDLE;
     endcase
@@ -113,13 +117,12 @@ module cordic #(
       state <= next_state;
 
       case (state)
-        //-- Espera. Los resultados de la operacion anterior siguen visibles
-        //-- en cos_out/sin_out hasta que llegue un nuevo start.
+        // Espera. Los resultados de la operacion anterior siguen visibles en cos_out/sin_out hasta que llegue un nuevo start.
         S_IDLE: begin
           if (start) done <= 1'b0;
         end
 
-        //-- Carga del vector inicial: x0 = 1/K16, y0 = 0, z0 = theta.
+        // Inicializacion del vector: x0 = 1/K16, y0 = 0, z0 = theta.
         S_INIT: begin
           x_reg <= INV_K;
           y_reg <= {WIDTH{1'b0}};
@@ -128,43 +131,41 @@ module cordic #(
           done  <= 1'b0;
         end
 
-        //-- Iteracion con d_i = +1 (angulo residual z >= 0):
-        //-- Se resta angulo elemental para acercar z a cero.
-        //--   x = x - (y >>> i)
-        //--   y = y + (x >>> i)
-        //--   z = z - alpha_i
+        // Iteracion con d_i = +1 (angulo residual z >= 0):
+        // Se resta angulo elemental para acercar z a cero.
+        
         S_ROT_POS: begin
-          x_reg <= x_next_pos;
-          y_reg <= y_next_pos;
-          z_reg <= z_next_pos;
+          x_reg <= x_next_pos; //   x = x - (y >>> i)
+          y_reg <= y_next_pos; //   y = y + (x >>> i)
+          z_reg <= z_next_pos; //   z = z - alpha_i
           iter  <= iter + 5'd1;
 
-          if (last_iter) begin
+          if (last_iter) begin // Iteracion 15
             cos_out <= x_next_pos;
             sin_out <= y_next_pos;
             done    <= 1'b1;
           end
         end
 
-        //-- Iteracion con d_i = -1 (angulo residual z < 0):
-        //-- Se suma angulo elemental para regresar z hacia cero.
-        //--   x = x + (y >>> i)
-        //--   y = y - (x >>> i)
-        //--   z = z + alpha_i
+        // Iteracion con d_i = -1 (angulo residual z < 0):
+        // Se suma angulo elemental para regresar z hacia cero.
+        
+        
+       
         S_ROT_NEG: begin
-          x_reg <= x_next_neg;
-          y_reg <= y_next_neg;
-          z_reg <= z_next_neg;
+          x_reg <= x_next_neg; //   x = x + (y >>> i)
+          y_reg <= y_next_neg; //   y = y - (x >>> i)
+          z_reg <= z_next_neg; //   z = z + alpha_i
           iter  <= iter + 5'd1;
 
-          if (last_iter) begin
+          if (last_iter) begin // Iteracion 15
             cos_out <= x_next_neg;
             sin_out <= y_next_neg;
             done    <= 1'b1;
           end
         end
 
-        //-- Resultado disponible. Se mantiene hasta un nuevo start.
+        // Resultado disponible. Se mantiene hasta un nuevo start.
         S_DONE: begin
           if (start) done <= 1'b0;
         end
