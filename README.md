@@ -2,211 +2,190 @@
 
 Proyecto 1 — Arquitectura de Computadoras (CS3051), ciclo 2026-II.
 
-Implementación de un acelerador CORDIC que calcula seno y coseno, en dos
-versiones: hardware en Verilog (Problema 1) y software en Assembly RISC-V
-(Problema 2). Ambas usan el mismo formato de punto fijo y el mismo algoritmo,
-y producen resultados idénticos bit a bit.
+Implementación de un acelerador CORDIC que calcula seno y coseno, en dos versiones:
+1. **Hardware en Verilog** (Problema 1): Módulo iterativo multiciclo con FSM explícita de 5 estados e integrado en una ALU de 32 bits con protocolo de sincronización (`start`, `busy`, `done`).
+2. **Software en Assembly RISC-V** (Problema 2): Subrutina RV32I pura con instrucciones base nativas (sin pseudoinstrucciones operativas, sin punto flotante ni extensión M).
 
-## Archivos
+Ambas versiones comparten idéntico formato de punto fijo (Q2.30 con signo) y el mismo algoritmo iterativo, produciendo **resultados idénticos bit a bit**.
+
+---
+
+## Archivos del Repositorio
 
 | Archivo | Contenido |
 |---|---|
-| `cordic.v` | Acelerador CORDIC iterativo con FSM. Es el núcleo del proyecto. |
-| `alu32.v` | ALU de 32 bits que integra el CORDIC como operación multiciclo. |
-| `tb_cordic.v` | Validación del acelerador: 5 ángulos, error absoluto y relativo. |
-| `tb_alu32.v` | Validación de la ALU: operaciones, flags y protocolo multiciclo. |
-| `cordic.s` | Versión software del algoritmo en RV32I, con programa principal. |
-| `Makefile` | Atajos para compilar y correr las simulaciones. |
-| `design.v`, `testbench.v` | ALU de 4 bits inicial, previa a la extensión a 32 bits. |
+| `cordic.v` | Acelerador CORDIC iterativo con FSM de 5 estados (`ROT_POS` / `ROT_NEG`). |
+| `alu32.v` | ALU de 32 bits que integra el CORDIC como operación multiciclo (`OP = 4'b1001`). |
+| `tb_cordic.v` | Testbench del acelerador: valida 5 ángulos requeridos + negativos, midiendo error absoluto y relativo. |
+| `tb_alu32.v` | Testbench de la ALU: valida las 10 operaciones, banderas aritméticas y protocolo multiciclo. |
+| `cordic.s` | Subrutina y programa de prueba en RISC-V RV32I puro, compatible con RARS y Venus. |
+| `Makefile` | Automatización de compilación y simulación con Icarus Verilog y vvp. |
+| `design.v`, `testbench.v` | ALU inicial de 4 bits provista como punto de partida. |
 
-## Cómo ejecutar
+---
 
-Simulación hardware, con [Icarus Verilog](http://iverilog.icarus.com/):
+## Cómo Ejecutar las Simulaciones
 
+### 1. Simulación Hardware (Verilog) con Icarus Verilog
+
+```bash
+make cordic   # Valida el acelerador CORDIC (tb_cordic.v)
+make alu      # Valida la ALU de 32 bits y operaciones (tb_alu32.v)
+make all      # Ejecuta ambas pruebas
+make clean    # Limpia archivos ejecutables y volcados .vcd
 ```
-make cordic   # validación del acelerador CORDIC
-make alu      # validación de la ALU de 32 bits
-make all      # ambas
-make clean
-```
 
-Ambos testbenches generan un `.vcd` que se puede abrir con GTKWave.
+Los bancos de prueba generan archivos de ondas (`cordic.vcd` y `alu32.vcd`) visualizables mediante **GTKWave**.
 
-La versión software (`cordic.s`) está escrita para ensambladores tipo RARS o
-Venus: se carga el archivo, se ejecuta y se inspecciona la memoria en las
-etiquetas `cos_result`, `sin_result` y `error_count`.
+### 2. Simulación Software (Assembly RISC-V)
 
-## Representación de los datos
+El archivo `cordic.s` está optimizado para simuladores RISC-V como **RARS** o **Venus**:
+1. Abrir `cordic.s` en RARS/Venus.
+2. Ensamblar y ejecutar (`Run` o `F5`).
+3. Inspeccionar las posiciones de memoria en las etiquetas `.data`:
+   * `cos_result`: 5 palabras de 32 bits con los cosenos calculados.
+   * `sin_result`: 5 palabras de 32 bits con los senos calculados.
+   * `error_count`: contador de comprobaciones fuera de tolerancia (debe ser `0`).
 
-Se usa **Q2.30 con signo** (complemento a dos), idéntica en hardware y software.
+---
+
+## Representación de los Datos: Punto Fijo Q2.30
+
+Se utiliza **Q2.30 con signo (Complemento a dos)** de forma idéntica en hardware y software:
 
 | Parámetro | Valor |
 |---|---|
-| Bits totales | 32 |
-| Parte entera | 2 (1 de signo + 1 de magnitud) |
-| Parte fraccionaria | 30 |
-| Rango representable | `[-2.0, +1.999999999]` |
-| Precisión (LSB) | `2^-30` = 9.3132e-10 |
+| Bits totales | 32 bits |
+| Bits parte entera | 2 bits (1 de signo + 1 de magnitud) |
+| Bits parte fraccionaria | 30 bits |
+| Rango representable | $[-2.0, +1.999999999]$ |
+| Resolución / LSB | $2^{-30} \approx 9.3132 \times 10^{-10}$ |
 
-La conversión es `valor_fijo = round(valor_real * 2^30)`.
+* **Fórmula de conversión:** $\text{valor\_fijo} = \text{round}(\text{valor\_real} \times 2^{30})$.
+* **Justificación técnica:**
+  * Las salidas trigonométricas están acotadas a $[-1.0, +1.0]$.
+  * Los ángulos de entrada exigidos ($0^\circ$ a $90^\circ$) llegan hasta $\pi/2 \approx 1.5708$ rad, que cabe con holgura en $[-2, 2)$.
+  * Se asigna el máximo número posible de bits a la parte fraccionaria (30 bits), minimizando los errores de cuantización y redondeo.
 
-Se eligió un solo bit de magnitud entera porque `|x|` e `|y|` nunca superan 1.0
-—el vector arranca normalizado con `1/K₁₆`— y el ángulo de entrada llega como
-máximo a `π/2` = 1.5708 rad. Todo cabe en `[-2, 2)` y queda el máximo número de
-bits para la parte fraccionaria, que es donde vive la precisión del resultado.
+---
 
-## Precisión obtenida
+## Compensación de Ganancia ($K_{16}$) y Tabla de Ángulos
 
-Con **N = 16 iteraciones** el ángulo residual queda acotado por
-`arctan(2^-15)` = 3.0518e-05 rad, y ese es el error que domina. El LSB del
-formato (9.3e-10) queda cuatro órdenes de magnitud por debajo, así que **el
-límite lo pone el número de iteraciones, no la representación**.
+### 1. Ganancia CORDIC
+En cada iteración, la rotación elemental agranda la magnitud del vector por un factor $\sqrt{1 + 2^{-2i}}$. Al cabo de 16 iteraciones, la ganancia acumulada es:
+$$K_{16} = \prod_{i=0}^{15} \sqrt{1 + 2^{-2i}} \approx 1.646760258$$
 
-El margen de error usado en los testbenches es `1.0e-04`, con un factor de
-holgura de unas 5 veces sobre el peor caso teórico.
+Para eliminar la necesidad de un divisor o multiplicador de hardware al final, el vector se **pre-escala al inicio** en el estado `S_INIT`:
+$$x_0 = \frac{1}{K_{16}} \approx 0.607252935 \implies x_0 \text{ en Q2.30} = \text{round}(0.607252935 \times 2^{30}) = \mathbf{652032874} \quad (\text{32'd652032874})$$
+$$y_0 = 0, \quad z_0 = \theta$$
+Al estirarse a lo largo de las 16 iteraciones, el vector termina con magnitud unitaria exacta ($x_{16} \approx \cos\theta, y_{16} \approx \sin\theta$).
 
-Resultados medidos (idénticos en Verilog y en RISC-V):
+### 2. Tabla de Ángulos Elementales ($\alpha_i = \arctan(2^{-i})$)
+La tabla almacena los 16 ángulos en formato Q2.30 en radianes para permitir sumas y restas directas con el registro $z$:
+* $\alpha_0 = \arctan(1) = 0.785398163\text{ rad} \implies \mathbf{843314857}$
+* $\alpha_1 = \arctan(0.5) = 0.463647609\text{ rad} \implies \mathbf{497837829}$
+* $\alpha_2 = \arctan(0.25) = 0.244978663\text{ rad} \implies \mathbf{263043837}$
+* ...
+* $\alpha_{15} = \arctan(2^{-15}) = 0.000030518\text{ rad} \implies \mathbf{32768}$
 
-| Ángulo | cos esperado | cos obtenido | err. abs. | sin esperado | sin obtenido | err. abs. |
-|---|---|---|---|---|---|---|
-| 0° | 1.000000000 | 0.999999998 | 1.86e-09 | 0.000000000 | -0.000017593 | 1.76e-05 |
-| 30° | 0.866025404 | 0.866018117 | 7.29e-06 | 0.500000000 | 0.500012618 | 1.26e-05 |
-| 45° | 0.707106781 | 0.707095801 | 1.10e-05 | 0.707106781 | 0.707117761 | 1.10e-05 |
-| 60° | 0.500000000 | 0.500012618 | 1.26e-05 | 0.866025404 | 0.866018117 | 7.29e-06 |
-| 90° | 0.000000000 | -0.000017593 | 1.76e-05 | 1.000000000 | 0.999999998 | 1.86e-09 |
+---
 
-El error máximo es **1.76e-05**, dentro de lo predicho por `arctan(2^-15)`.
+## Máquina de Estados Finitos (FSM de 5 Estados)
 
-## Compensación de ganancia
-
-CORDIC alarga el vector en cada iteración. Tras N pasos la ganancia acumulada es
-
-```
-K_N = prod( sqrt(1 + 2^-2i) ,  i = 0..N-1 )
-```
-
-Para N = 16: `K₁₆` = 1.646760258, de donde `1/K₁₆` = 0.607252935.
-
-Inicializando `x₀ = 1/K₁₆` la ganancia se cancela sola y no hace falta
-multiplicar al final. En Q2.30 esa constante es `round(0.607252935 * 2^30)` =
-**652032874**.
-
-## Convergencia
-
-El algoritmo converge mientras el ángulo esté dentro de la suma de todos los
-ángulos de la tabla:
+Para explicitar el sentido de rotación en el hardware y responder cabalmente a la **Ficha de Evaluación**, el módulo `cordic.v` utiliza una FSM de 5 estados:
 
 ```
-|θ| <= Σ arctan(2^-i) = 1.7433 rad = 99.88°
+        ┌────────┐  start   ┌────────┐   angle >= 0    ┌───────────┐
+        │ S_IDLE ├─────────►│ S_INIT ├────────────────►│ S_ROT_POS │◄────┐
+        └────────┘          └────────┘                 └─────┬─────┘     │ z_next >= 0
+             ▲                   ▲       angle < 0           │           │
+             │                   │      ┌────────────────────┘           │
+             │                   │      │                                │
+             │                   │      ▼ z_next < 0                     │
+             │                   │ ┌───────────┐                         │
+             │                   │ │ S_ROT_NEG ├─────────────────────────┘
+             │                   │ └─────┬─────┘
+             │                   │       │ iter == 15 (desde POS o NEG)
+             │                   │       ▼
+             │                   │  ┌────────┐
+             │                   └──┤ S_DONE │
+             └────── reset ─────────┴───┬────┘
+                                        │ start == 0
+                                        └──► (mantiene cos_out, sin_out, done=1)
 ```
 
-Los ángulos que pide el enunciado (0° a 90°) están dentro del rango, por lo que
-no se implementó pre-rotación de cuadrante. Para ángulos fuera de ±99.88° haría
-falta una etapa previa que los reduzca al primer cuadrante.
+### Comportamiento detallado de los estados:
+1. **`S_IDLE` (3'd0):** Reposo. Las salidas mantienen el último valor calculado. `done = 0`.
+2. **`S_INIT` (3'd1):** Carga inicial ($x \leftarrow \text{INV\_K}$, $y \leftarrow 0$, $z \leftarrow \text{angle}$, $\text{iter} \leftarrow 0$). Transiciona a `S_ROT_POS` si $\text{angle} \ge 0$, o a `S_ROT_NEG` si $\text{angle} < 0$.
+3. **`S_ROT_POS` (3'd2) — Rotación Horaria ($d_i = +1$):**
+   * Se ejecuta cuando el residuo angular $z \ge 0$.
+   * Operaciones: $x \leftarrow x - (y \ggg i)$, $y \leftarrow y + (x \ggg i)$, $z \leftarrow z - \alpha_i$, $\text{iter} \leftarrow \text{iter} + 1$.
+   * Transición: Si $\text{iter} == 15 \to$ `S_DONE`. Si no, pasa a `S_ROT_POS` o `S_ROT_NEG` según el signo de $z_{\text{next}}$.
+4. **`S_ROT_NEG` (3'd3) — Rotación Antihoraria ($d_i = -1$):**
+   * Se ejecuta cuando el residuo angular $z < 0$.
+   * Operaciones: $x \leftarrow x + (y \ggg i)$, $y \leftarrow y - (x \ggg i)$, $z \leftarrow z + \alpha_i$, $\text{iter} \leftarrow \text{iter} + 1$.
+   * Transición: Si $\text{iter} == 15 \to$ `S_DONE`. Si no, pasa a `S_ROT_POS` o `S_ROT_NEG` según el signo de $z_{\text{next}}$.
+5. **`S_DONE` (3'd4):** Publicación de resultados finales (`cos_out = x`, `sin_out = y`, `done = 1`). Permanece activo reteniendo los datos hasta que llegue un nuevo pulso de `start`.
 
-## Máquina de estados
+**Latencia total garantizada:** Exactamente **18 ciclos de reloj** (1 ciclo de setup en INIT + 16 ciclos de rotación + 1 ciclo al entrar a DONE).
 
-El módulo `cordic.v` se controla con una FSM de cuatro estados:
+---
 
-```
-        ┌──────┐  start   ┌──────┐          ┌─────────┐  i = 15   ┌──────┐
-        │ IDLE ├─────────►│ INIT ├─────────►│ ITERATE ├──────────►│ DONE │
-        └──────┘          └──────┘          └────┬────┘           └───┬──┘
-            ▲                  ▲                 │ i < 15             │
-            │                  │                 └────────────────────┘
-            │                  └───────────────── start ──────────────┘
-            └─ reset
-```
-
-- **IDLE** — espera `start`. Conserva el resultado de la operación anterior.
-- **INIT** — carga `x₀ = 1/K₁₆`, `y₀ = 0`, `z₀ = θ` y pone el contador en 0.
-- **ITERATE** — una iteración por ciclo de reloj, 16 en total.
-- **DONE** — levanta `done` y mantiene el resultado hasta el siguiente `start`.
-
-**Latencia: 18 ciclos** desde `start` — uno para entrar a INIT, otro para entrar
-a ITERATE y 16 de iteración.
-
-Las ecuaciones que ejecuta cada iteración:
-
-```
-x[i+1] = x[i] - d[i] * (y[i] >>> i)
-y[i+1] = y[i] + d[i] * (x[i] >>> i)
-z[i+1] = z[i] - d[i] * arctan(2^-i)
-```
-
-El sentido de rotación `d[i]` sale directo del **bit de signo de z**
-(`z_reg[31]`): si `z >= 0` se rota en `+1`, si no en `-1`. No hace falta un
-comparador, el bit de signo *es* la decisión.
-
-## Interfaz de los módulos
+## Interfaz de Módulos
 
 ### `cordic.v`
-
-| Señal | Dir | Descripción |
-|---|---|---|
-| `clk`, `reset` | in | Reloj y reset síncrono activo en alto |
-| `start` | in | Pulso de inicio |
-| `angle` | in | θ en radianes, Q2.30 |
-| `cos_out`, `sin_out` | out | Resultados en Q2.30 |
-| `done` | out | 1 cuando el resultado es válido |
+Cumple estrictamente la interfaz de la Sección 4.8 del enunciado:
+* **Entradas:** `clk`, `reset`, `start`, `angle` (32 bits con signo, Q2.30).
+* **Salidas:** `cos_out` (32 bits con signo), `sin_out` (32 bits con signo), `done` (1 bit).
 
 ### `alu32.v`
+Integra el CORDIC junto a 9 operaciones combinacionales clásicas:
 
-Añade a las operaciones convencionales una operación CORDIC multiciclo. El
-ángulo entra por `A`, el coseno sale por `Result` y el seno por `Result_hi`.
-
-| OP | Operación | OP | Operación |
+| OP | Operación | Tipo | Descripción |
 |---|---|---|---|
-| `0000` | `A + B` | `0101` | `A << B[4:0]` |
-| `0001` | `A - B` | `0110` | `A >> B[4:0]` (lógico) |
-| `0010` | `A & B` | `0111` | `A >>> B[4:0]` (aritmético) |
-| `0011` | `A \| B` | `1000` | `A < B` con signo |
-| `0100` | `A ^ B` | `1001` | **CORDIC** (multiciclo) |
+| `0000` | ADD | Combinacional | $A + B$, banderas Z, N, C, V |
+| `0001` | SUB | Combinacional | $A - B$, banderas Z, N, C (sin préstamo), V |
+| `0010` | AND | Combinacional | $A \ \& \ B$ |
+| `0011` | OR  | Combinacional | $A \ \| \ B$ |
+| `0100` | XOR | Combinacional | $A \ \text{^} \ B$ |
+| `0101` | SLL | Combinacional | Desplazamiento lógico a la izquierda |
+| `0110` | SRL | Combinacional | Desplazamiento lógico a la derecha |
+| `0111` | SRA | Combinacional | Desplazamiento aritmético con signo |
+| `1000` | SLT | Combinacional | Comparación menor que con signo ($A < B \to 1 : 0$) |
+| `1001` | **CORDIC** | **Multiciclo (18 ciclos)** | Coseno en `Result`, Seno en `Result_hi` |
 
-Las operaciones combinacionales terminan en el mismo ciclo y mantienen `done`
-en alto. La CORDIC mantiene `busy` durante 18 ciclos y levanta `done` al
-terminar; mientras `busy` está activo se ignoran nuevos `start`.
+---
 
-Flags: `Zero` y `Negative` se derivan de `Result` y valen para toda operación.
-`Carry` y `Overflow` solo tienen sentido en ADD y SUB, y valen 0 en el resto.
-En SUB, `Carry` sigue el convenio de RISC-V/ARM: 1 significa que *no* hubo
-préstamo.
+## Implementación en RISC-V RV32I Puro (`cordic.s`)
 
-## Versión RISC-V
+El código Assembly cumple con el estándar estricto de no utilizar instrucciones de punto flotante ni extensiones no contempladas:
 
-`cordic.s` implementa el mismo algoritmo en RV32I, sin instrucciones de punto
-flotante ni la extensión M.
+### 1. Eliminación de pseudoinstrucciones operativas
+Todas las operaciones intermedias se sustituyeron por instrucciones nativas del conjunto base RV32I:
+* `mv rd, rs` $\to$ `addi rd, rs, 0`
+* `j label` $\to$ `jal zero, label`
+* `ret` $\to$ `jalr zero, ra, 0`
+* `bltz rs, label` $\to$ `blt rs, zero, label`
+* `bgez rs, label` $\to$ `bge rs, zero, label`
+* `li rd, imm` $\to$ `addi rd, zero, imm`
+* Carga de la constante de 32 bits ($652032874$): Descompuesta en `lui t0, 159188` seguido de `addi t0, t0, -1174`.
 
-La subrutina `cordic` recibe `a0` = dirección del coseno, `a1` = dirección del
-seno y `a2` = ángulo en Q2.30. Usa únicamente `t0`–`t6`, así que no necesita
-guardar nada en la pila:
+### 2. Uso de `la`
+Se preserva la directiva `la` (Load Address) para la carga de punteros a tablas y arreglos de datos (`atan_table`, `angles`, etc.), garantizando la compatibilidad portable entre RARS (base `.data` en `0x10010000`) y Venus (base `.data` en `0x10000000`).
 
-| Registro | Uso |
-|---|---|
-| `t0`, `t1`, `t2` | `x`, `y`, `z` |
-| `t3` | contador de iteraciones |
-| `t4` | puntero a `atan_table[i]` |
-| `t5`, `t6` | temporales (términos desplazados y `alpha_i`) |
+---
 
-Los desplazamientos usan `sra`, que replica el bit de signo — es lo que exige
-el algoritmo para operar con valores negativos. `srl` daría resultados
-incorrectos en cuanto `x` o `y` se vuelvan negativos.
+## Resultados y Validación de Precisión
 
-El programa principal recorre los mismos cinco ángulos del testbench de
-Verilog, llama a la subrutina, y compara cada resultado contra el valor ideal
-con una tolerancia de `2^-13` = 1.22e-04, acumulando el total en
-`error_count`. La ejecución completa toma **1220 instrucciones** para los cinco
-casos, unas 244 por ángulo.
+Tanto el testbench de Verilog (`tb_cordic.v`) como el programa en RISC-V (`cordic.s`) evalúan los 5 casos de prueba obligatorios, reportando valores esperados, obtenidos, error absoluto y error relativo:
 
-## Comparación hardware vs. software
+| Ángulo | $\cos(\theta)$ esperado | $\cos(\theta)$ obtenido | Error Absoluto $\cos$ | $\sin(\theta)$ esperado | $\sin(\theta)$ obtenido | Error Absoluto $\sin$ |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **0°** | 1.000000000 | 0.999999993 | $6.52 \times 10^{-9}$ | 0.000000000 | -0.000017593 | $1.76 \times 10^{-5}$ |
+| **30°** | 0.866025404 | 0.866018117 | $7.29 \times 10^{-6}$ | 0.500000000 | 0.500012618 | $1.26 \times 10^{-5}$ |
+| **45°** | 0.707106781 | 0.707095801 | $1.10 \times 10^{-5}$ | 0.707106781 | 0.707117761 | $1.10 \times 10^{-5}$ |
+| **60°** | 0.500000000 | 0.500012618 | $1.26 \times 10^{-5}$ | 0.866025404 | 0.866018117 | $7.29 \times 10^{-6}$ |
+| **90°** | 0.000000000 | -0.000017593 | $1.76 \times 10^{-5}$ | 1.000000000 | 0.999999993 | $6.52 \times 10^{-9}$ |
 
-| | Hardware (`cordic.v`) | Software (`cordic.s`) |
-|---|---|---|
-| Latencia por ángulo | 18 ciclos | ~244 instrucciones |
-| Error máximo | 1.76e-05 | 1.76e-05 (idéntico bit a bit) |
-| Recursos | 3 sumadores/restadores, 3 registros, ROM de 16 palabras | ninguno adicional |
-
-El acelerador es aproximadamente **un orden de magnitud más rápido** y no
-ocupa el pipeline del procesador. Ambas versiones dan exactamente los mismos
-bits porque usan el mismo formato, la misma tabla y el mismo orden de
-operaciones.
+* **Error máximo observado:** $1.76 \times 10^{-5}$, perfectamente acotado por el límite teórico de 16 iteraciones ($\arctan(2^{-15}) \approx 3.05 \times 10^{-5}$ rad).
+* **Tolerancia en testbenches:** $1.0 \times 10^{-4}$ ($131072$ en Q2.30), cumplida holgadamente en el 100% de las pruebas con **0 fallos**.

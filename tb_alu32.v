@@ -1,13 +1,3 @@
-//=============================================================================
-// tb_alu32.v -- Testbench de la ALU de 32 bits con acelerador CORDIC
-//
-// Cubre dos bloques:
-//   1. Operaciones combinacionales: resultado y flags (Zero, Negative,
-//      Carry, Overflow), incluyendo los casos limite de desborde con signo.
-//   2. Operacion CORDIC multiciclo: protocolo start/busy/done y exactitud
-//      del seno y el coseno frente a los valores ideales.
-//=============================================================================
-
 `timescale 1ns/1ps
 
 module tb_alu32();
