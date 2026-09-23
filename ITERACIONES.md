@@ -167,7 +167,47 @@ corrimientos.** Eso es toda la iteracion.
 
 ## 6. Las 16 iteraciones
 
-### i = 0   `z[31] = 0`   S_ROT_POS   (d = +1, desplazamiento de 0)
+### Correspondencia con los ciclos de reloj
+
+Cada iteracion ocupa **un ciclo** y se ejecuta dentro de un estado de
+rotacion. El mapeo, tomado de la simulacion:
+
+```
+ciclo  1   S_INIT       carga x0, y0, z0, iter=0
+ciclo  2   S_ROT_*      iteracion i=0
+ciclo  3   S_ROT_*      iteracion i=1
+  ...
+ciclo 17   S_ROT_*      iteracion i=15
+ciclo 18   S_DONE       done=1, resultado disponible
+```
+
+O sea: **la iteracion `i` corre en el ciclo `i + 2`**. Total 18 ciclos desde
+`start`, que es la latencia del acelerador.
+
+### Como se elige el estado siguiente
+
+El estado en que corre la iteracion `i` codifica `d[i]`. Ese estado se decidio
+**durante la iteracion anterior**, mirando el signo de `z_next`, o sea el
+residual que `z` va a tener en el ciclo siguiente:
+
+```
+z_next[31] = 0  ->  siguiente estado = S_ROT_POS   (d = +1)
+z_next[31] = 1  ->  siguiente estado = S_ROT_NEG   (d = -1)
+
+excepto saliendo de S_INIT, donde z aun no se ha cargado y
+el bit que manda es angle[31].
+
+y en iter = 15, donde la transicion va a S_DONE sin mirar el signo.
+```
+
+Por eso en cada bloque de abajo aparecen dos estados: el que **ejecuta** la
+iteracion, y el que queda **seleccionado** para la siguiente.
+
+---
+
+### i = 0  |  ciclo 2  |  estado `S_ROT_POS`
+
+`z[31] = 0`  ->  `d = +1`  ->  desplazamiento de 0 bits
 
 ```
            antes                              despues
@@ -180,7 +220,13 @@ y >>> 0    00.000000000000000000000000000000
 alpha[ 0]  00.110010010000111111011010101001
 ```
 
-### i = 1   `z[31] = 1`   S_ROT_NEG   (d = -1, desplazamiento de 1)
+`z_next[31] = 1`  ->  siguiente estado: **`S_ROT_NEG`**  (ciclo 3)
+
+---
+
+### i = 1  |  ciclo 3  |  estado `S_ROT_NEG`
+
+`z[31] = 1`  ->  `d = -1`  ->  desplazamiento de 1 bit
 
 ```
            antes                              despues
@@ -193,7 +239,13 @@ y >>> 1    00.010011011011101001110110110101
 alpha[ 1]  00.011101101011000110011100000101
 ```
 
-### i = 2   `z[31] = 0`   S_ROT_POS   (d = +1, desplazamiento de 2)
+`z_next[31] = 0`  ->  siguiente estado: **`S_ROT_POS`**  (ciclo 4)
+
+---
+
+### i = 2  |  ciclo 4  |  estado `S_ROT_POS`
+
+`z[31] = 0`  ->  `d = +1`  ->  desplazamiento de 2 bits
 
 ```
            antes                              despues
@@ -206,7 +258,13 @@ y >>> 2    00.000100110110111010011101101101
 alpha[ 2]  00.001111101011011011101011111101
 ```
 
-### i = 3   `z[31] = 1`   S_ROT_NEG   (d = -1, desplazamiento de 3)
+`z_next[31] = 1`  ->  siguiente estado: **`S_ROT_NEG`**  (ciclo 5)
+
+---
+
+### i = 3  |  ciclo 5  |  estado `S_ROT_NEG`
+
+`z[31] = 1`  ->  `d = -1`  ->  desplazamiento de 3 bits
 
 ```
            antes                              despues
@@ -219,7 +277,13 @@ y >>> 3    00.000100010000000011001001111111
 alpha[ 3]  00.000111111101010110111010100111
 ```
 
-### i = 4   `z[31] = 0`   S_ROT_POS   (d = +1, desplazamiento de 4)
+`z_next[31] = 0`  ->  siguiente estado: **`S_ROT_POS`**  (ciclo 6)
+
+---
+
+### i = 4  |  ciclo 6  |  estado `S_ROT_POS`
+
+`z[31] = 0`  ->  `d = +1`  ->  desplazamiento de 4 bits
 
 ```
            antes                              despues
@@ -232,7 +296,13 @@ y >>> 4    00.000001101101010011100011011100
 alpha[ 4]  00.000011111111101010101101110111
 ```
 
-### i = 5   `z[31] = 0`   S_ROT_POS   (d = +1, desplazamiento de 5)
+`z_next[31] = 0`  ->  siguiente estado: **`S_ROT_POS`**  (ciclo 7)
+
+---
+
+### i = 5  |  ciclo 7  |  estado `S_ROT_POS`
+
+`z[31] = 0`  ->  `d = +1`  ->  desplazamiento de 5 bits
 
 ```
            antes                              despues
@@ -245,7 +315,13 @@ y >>> 5    00.000000111101110111010010100000
 alpha[ 5]  00.000001111111111101010101011100
 ```
 
-### i = 6   `z[31] = 1`   S_ROT_NEG   (d = -1, desplazamiento de 6)
+`z_next[31] = 1`  ->  siguiente estado: **`S_ROT_NEG`**  (ciclo 8)
+
+---
+
+### i = 6  |  ciclo 8  |  estado `S_ROT_NEG`
+
+`z[31] = 1`  ->  `d = -1`  ->  desplazamiento de 6 bits
 
 ```
            antes                              despues
@@ -258,7 +334,13 @@ y >>> 6    00.000000100000101011100110110101
 alpha[ 6]  00.000000111111111111101010101011
 ```
 
-### i = 7   `z[31] = 0`   S_ROT_POS   (d = +1, desplazamiento de 7)
+`z_next[31] = 0`  ->  siguiente estado: **`S_ROT_POS`**  (ciclo 9)
+
+---
+
+### i = 7  |  ciclo 9  |  estado `S_ROT_POS`
+
+`z[31] = 0`  ->  `d = +1`  ->  desplazamiento de 7 bits
 
 ```
            antes                              despues
@@ -271,7 +353,13 @@ y >>> 7    00.000000001111111010010010111101
 alpha[ 7]  00.000000011111111111111101010101
 ```
 
-### i = 8   `z[31] = 1`   S_ROT_NEG   (d = -1, desplazamiento de 8)
+`z_next[31] = 1`  ->  siguiente estado: **`S_ROT_NEG`**  (ciclo 10)
+
+---
+
+### i = 8  |  ciclo 10  |  estado `S_ROT_NEG`
+
+`z[31] = 1`  ->  `d = -1`  ->  desplazamiento de 8 bits
 
 ```
            antes                              despues
@@ -284,7 +372,13 @@ y >>> 8    00.000000001000000100000101101011
 alpha[ 8]  00.000000001111111111111111101011
 ```
 
-### i = 9   `z[31] = 1`   S_ROT_NEG   (d = -1, desplazamiento de 9)
+`z_next[31] = 1`  ->  siguiente estado: **`S_ROT_NEG`**  (ciclo 11)
+
+---
+
+### i = 9  |  ciclo 11  |  estado `S_ROT_NEG`
+
+`z[31] = 1`  ->  `d = -1`  ->  desplazamiento de 9 bits
 
 ```
            antes                              despues
@@ -297,7 +391,13 @@ y >>> 9    00.000000000100000000010100010010
 alpha[ 9]  00.000000000111111111111111111101
 ```
 
-### i = 10   `z[31] = 0`   S_ROT_POS   (d = +1, desplazamiento de 10)
+`z_next[31] = 0`  ->  siguiente estado: **`S_ROT_POS`**  (ciclo 12)
+
+---
+
+### i = 10  |  ciclo 12  |  estado `S_ROT_POS`
+
+`z[31] = 0`  ->  `d = +1`  ->  desplazamiento de 10 bits
 
 ```
            antes                              despues
@@ -310,7 +410,13 @@ y >>> 10   00.000000000001111111101110011100
 alpha[10]  00.000000000100000000000000000000
 ```
 
-### i = 11   `z[31] = 0`   S_ROT_POS   (d = +1, desplazamiento de 11)
+`z_next[31] = 0`  ->  siguiente estado: **`S_ROT_POS`**  (ciclo 13)
+
+---
+
+### i = 11  |  ciclo 13  |  estado `S_ROT_POS`
+
+`z[31] = 0`  ->  `d = +1`  ->  desplazamiento de 11 bits
 
 ```
            antes                              despues
@@ -323,7 +429,13 @@ y >>> 11   00.000000000000111111111110001001
 alpha[11]  00.000000000010000000000000000000
 ```
 
-### i = 12   `z[31] = 1`   S_ROT_NEG   (d = -1, desplazamiento de 12)
+`z_next[31] = 1`  ->  siguiente estado: **`S_ROT_NEG`**  (ciclo 14)
+
+---
+
+### i = 12  |  ciclo 14  |  estado `S_ROT_NEG`
+
+`z[31] = 1`  ->  `d = -1`  ->  desplazamiento de 12 bits
 
 ```
            antes                              despues
@@ -336,7 +448,13 @@ y >>> 12   00.000000000000100000000000110011
 alpha[12]  00.000000000001000000000000000000
 ```
 
-### i = 13   `z[31] = 0`   S_ROT_POS   (d = +1, desplazamiento de 13)
+`z_next[31] = 0`  ->  siguiente estado: **`S_ROT_POS`**  (ciclo 15)
+
+---
+
+### i = 13  |  ciclo 15  |  estado `S_ROT_POS`
+
+`z[31] = 0`  ->  `d = +1`  ->  desplazamiento de 13 bits
 
 ```
            antes                              despues
@@ -349,7 +467,13 @@ y >>> 13   00.000000000000001111111111111110
 alpha[13]  00.000000000000100000000000000000
 ```
 
-### i = 14   `z[31] = 1`   S_ROT_NEG   (d = -1, desplazamiento de 14)
+`z_next[31] = 1`  ->  siguiente estado: **`S_ROT_NEG`**  (ciclo 16)
+
+---
+
+### i = 14  |  ciclo 16  |  estado `S_ROT_NEG`
+
+`z[31] = 1`  ->  `d = -1`  ->  desplazamiento de 14 bits
 
 ```
            antes                              despues
@@ -362,7 +486,13 @@ y >>> 14   00.000000000000001000000000000110
 alpha[14]  00.000000000000010000000000000000
 ```
 
-### i = 15   `z[31] = 1`   S_ROT_NEG   (d = -1, desplazamiento de 15)
+`z_next[31] = 1`  ->  siguiente estado: **`S_ROT_NEG`**  (ciclo 17)
+
+---
+
+### i = 15  |  ciclo 17  |  estado `S_ROT_NEG`
+
+`z[31] = 1`  ->  `d = -1`  ->  desplazamiento de 15 bits
 
 ```
            antes                              despues
@@ -375,7 +505,9 @@ y >>> 15   00.000000000000000100000000000001
 alpha[15]  00.000000000000001000000000000000
 ```
 
----
+`iter = 15`, ultima iteracion: la FSM transiciona a **`S_DONE`** sin mirar
+el signo. Los resultados se publican en `cos_out` y `sin_out` en este mismo
+flanco, asi que ya estan validos cuando `done` sube.
 
 ## 7. Salida
 
