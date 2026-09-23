@@ -1,6 +1,6 @@
                 .data
 
-# Tabla de angulos
+# Tabla de angulos: alpha_i = arctan(2^-i)
 
                 .align 2
 atan_table:     .word 843314857         # i= 0  0.785398163 rad = 45.000000 deg
@@ -30,7 +30,7 @@ angles:         .word 0                 #  0 grados
                 .word 1124419809        # 60 grados
                 .word 1686629713        # 90 grados
 
-
+# Valores ideales/esperados para comparar
 cos_expected:   .word 1073741824, 929887697, 759250125, 536870912, 0
 sin_expected:   .word 0, 536870912, 759250125, 929887697, 1073741824
 
@@ -38,8 +38,8 @@ sin_expected:   .word 0, 536870912, 759250125, 929887697, 1073741824
 # Espacio reservado para los resultados
 
                 .align 2
-cos_result:     .space 20               
-sin_result:     .space 20               
+cos_result:     .space 20     # 5 palabras para cos(0), cos(30), ...          
+sin_result:     .space 20     # 5 palabras para sin(0), sin(30), ...          
 error_count:    .word 0                 
 
                 .text
